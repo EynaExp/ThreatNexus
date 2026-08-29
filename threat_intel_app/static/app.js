@@ -1527,7 +1527,7 @@ function addGridLines() {
       const r = Math.sin(phi);
       points.push(new THREE.Vector3(r * Math.cos(theta), Math.cos(phi), r * Math.sin(theta)));
     }
-    globeScene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), mat));
+    globeGlobe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), mat));
   }
   // Longitude lines
   for (let lon = 0; lon < 360; lon += 20) {
@@ -1539,7 +1539,7 @@ function addGridLines() {
         Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)
       ));
     }
-    globeScene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), mat));
+    globeGlobe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), mat));
   }
 }
 
@@ -1557,7 +1557,6 @@ async function loadGeoJSON() {
 function drawTopoJSON(topo) {
   if (!topo || !topo.objects) return;
   try {
-    // Parse TopoJSON manually
     const countries = topo.objects.countries;
     if (!countries || !countries.geometries) return;
     const transform = topo.transform;
@@ -1571,24 +1570,23 @@ function drawTopoJSON(topo) {
       arcs.forEach(polygon => {
         polygon.forEach(ring => {
           const points = [];
-          let cx = 0, cy = 0;
+          let lx = 0, ly = 0;
           ring.forEach(arcIdx => {
             const reversed = arcIdx < 0;
             const arc = topo.arcs[reversed ? ~arcIdx : arcIdx];
             if (!arc) return;
-            let lx = 0, ly = 0;
             const arcPoints = reversed ? [...arc].reverse() : arc;
             arcPoints.forEach((delta, i) => {
               lx += delta[0]; ly += delta[1];
               const lon = (lx * scale[0] + translate[0]);
               const lat = (ly * scale[1] + translate[1]);
-              const pos = latLonToVec3(lat, lon, 1.001);
+              const pos = latLonToVec3(lat, lon, 1.002);
               if (i > 0 || points.length === 0) points.push(pos);
             });
           });
           if (points.length > 1) {
             const geo3 = new THREE.BufferGeometry().setFromPoints(points);
-            globeScene.add(new THREE.Line(geo3, lineMat));
+            globeGlobe.add(new THREE.Line(geo3, lineMat));
           }
         });
       });
@@ -1869,8 +1867,9 @@ function renderGlobeCountryList() {
 // Rebuild globe with rotation sync — attach markers to globe object
 function rebuildGlobeWithChildren() {
   if (!globeGlobe) return;
-  // Remove old children markers
-  while (globeGlobe.children.length) globeGlobe.remove(globeGlobe.children[0]);
+  // Remove only marker/ring children, keep grid lines and country outlines
+  const toRemove = globeGlobe.children.filter(c => c.name === 'marker' || c.name === 'ring');
+  toRemove.forEach(c => globeGlobe.remove(c));
   globeMarkers = [];
 
   const data = State.globeData;
