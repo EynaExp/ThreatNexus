@@ -73,7 +73,7 @@ const COUNTRIES = [
 
 // Lat/Lon for 3D globe markers (country code → [lat, lon])
 const COUNTRY_COORDS = {
-  AF:[33.93,67.71],AL:[41.15,20.17],DZ:[28.03,1.66],AR:[-38.42,-63.62],AM:[40.07,45.04],
+  AF:[33.93,67.71],AL:[41.15,20.17],AD:[42.55,1.60],DZ:[28.03,1.66],AR:[-38.42,-63.62],AM:[40.07,45.04],
   AU:[-25.27,133.78],AT:[47.52,14.55],AZ:[40.14,47.58],BH:[26.03,50.55],BD:[23.68,90.36],
   BY:[53.71,27.95],BE:[50.50,4.47],BO:[-16.29,-63.59],BA:[43.92,17.68],BR:[-14.24,-51.93],
   BG:[42.73,25.49],KH:[12.57,104.99],CM:[3.85,11.50],CA:[56.13,-106.35],CL:[-35.68,-71.54],
@@ -186,7 +186,7 @@ document.addEventListener('click', e => {
 });
 
 // ── Confirm Dialog ─────────────────────────────────────
-function confirm(msg, onOk) {
+function confirmAction(msg, onOk) {
   document.getElementById('confirm-msg').textContent = msg;
   const btn = document.getElementById('confirm-ok-btn');
   btn.onclick = () => { closeModal('confirm-modal'); onOk(); };
@@ -397,11 +397,12 @@ function renderPagination(containerId, section, totalItems) {
   if (!container) return;
   container.innerHTML = '';
   if (total <= 1) return;
+  const sectionPageMap = { cve: 'cve', dash: 'dashboard', cred: 'credentials' };
   const addBtn = (label, pg, active) => {
     const btn = document.createElement('button');
     btn.className = 'page-btn' + (active ? ' active' : '');
     btn.textContent = label;
-    btn.onclick = () => { State.page[section] = pg; navigate(State.currentPage === section ? State.currentPage : section); };
+    btn.onclick = () => { State.page[section] = pg; navigate(sectionPageMap[section] || section); };
     container.appendChild(btn);
   };
   if (current > 1) addBtn('‹', current - 1, false);
@@ -645,7 +646,7 @@ async function saveCve() {
 async function editCve(id) { await loadCve(); openCveModal(id); }
 
 async function deleteCve(id) {
-  confirm('Delete this CVE record?', async () => {
+  confirmAction('Delete this CVE record?', async () => {
     try {
       await api('DELETE', `/cve/${id}`);
       toast('CVE deleted', 'success');
@@ -707,13 +708,14 @@ async function addCveColumn() {
 // ══════════════════════════════════════════════════════
 async function loadDashboard() {
   try {
-    const res = await api('GET', '/dashboard');
-    State.dashEntries = res.entries || [];
-    State.dashCustomCols = res.custom_columns || [];
+    const [dashRes, cveRes] = await Promise.all([api('GET', '/dashboard'), api('GET', '/cve')]);
+    State.dashEntries = dashRes.entries || [];
+    State.dashCustomCols = dashRes.custom_columns || [];
+    State.cveRecords = cveRes.records || [];
     // Populate CVE selector for the modal
     const sel = document.getElementById('dash-cve-refs');
     sel.innerHTML = '';
-    (res.cve_records || []).forEach(r => {
+    State.cveRecords.forEach(r => {
       const opt = document.createElement('option');
       opt.value = r.id;
       opt.textContent = `${r.cve_id} [${r.severity}]`;
@@ -939,7 +941,7 @@ async function saveDashboard() {
 async function editDashEntry(id) { await loadDashboard(); openDashboardModal(id); }
 
 async function deleteDashEntry(id) {
-  confirm('Delete this entry?', async () => {
+  confirmAction('Delete this entry?', async () => {
     try {
       await api('DELETE', `/dashboard/${id}`);
       toast('Entry deleted', 'success');
@@ -1163,7 +1165,7 @@ async function saveCredential() {
 async function editCredential(id) { await loadCredentials(); openCredModal(id); }
 
 async function deleteCredential(id) {
-  confirm('Delete this credential?', async () => {
+  confirmAction('Delete this credential?', async () => {
     try {
       await api('DELETE', `/credentials/${id}`);
       toast('Credential deleted', 'success');
@@ -1301,7 +1303,7 @@ async function toggleUserActive(id, active) {
 }
 
 async function deleteUser(id) {
-  confirm('Delete this user?', async () => {
+  confirmAction('Delete this user?', async () => {
     try {
       await api('DELETE', `/users/${id}`);
       toast('User deleted', 'success');
@@ -1325,7 +1327,7 @@ async function saveGroup() {
 }
 
 async function deleteGroup(id) {
-  confirm('Delete this group? Users will lose this group assignment.', async () => {
+  confirmAction('Delete this group? Users will lose this group assignment.', async () => {
     try {
       await api('DELETE', `/groups/${id}`);
       toast('Group deleted', 'success');
@@ -1605,50 +1607,8 @@ function latLonToVec3(lat, lon, r) {
 }
 
 function loadGlobeMarkers() {
-  // Remove old markers
-  globeMarkers.forEach(m => globeScene.remove(m));
-  globeMarkers = [];
-
-  const data = State.globeData;
-  if (!data.length) return;
-
-  const maxCount = Math.max(...data.map(d => d.access_count));
-
-  data.forEach(stat => {
-    const coords = COUNTRY_COORDS[stat.country_code];
-    if (!coords) return;
-    const [lat, lon] = coords;
-    const pos = latLonToVec3(lat, lon, 1.0);
-
-    const ratio = stat.access_count / maxCount;
-    const height = 0.05 + ratio * 0.6;
-    const color = ratio > 0.75 ? 0xff0044 : ratio > 0.5 ? 0xff8800 : ratio > 0.25 ? 0xffcc00 : 0x00ff88;
-
-    // Bar/spike
-    const geo = new THREE.CylinderGeometry(0.008, 0.015, height, 6);
-    const mat = new THREE.MeshPhongMaterial({ color, emissive: color, emissiveIntensity: 0.5, transparent: true, opacity: 0.9 });
-    const bar = new THREE.Mesh(geo, mat);
-
-    // Position the bar on the surface
-    const normal = pos.clone().normalize();
-    bar.position.copy(pos.clone().add(normal.clone().multiplyScalar(height / 2)));
-    bar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
-    bar.userData = stat;
-    bar.name = 'marker';
-    globeScene.add(bar);
-    globeMarkers.push(bar);
-
-    // Pulse ring
-    const ringGeo = new THREE.RingGeometry(0.02, 0.03, 16);
-    const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.position.copy(pos.clone().add(normal.clone().multiplyScalar(0.005)));
-    ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
-    ring.userData = stat;
-    ring.name = 'ring';
-    globeScene.add(ring);
-    globeMarkers.push(ring);
-  });
+  if (!globeGlobe) return rebuildGlobeWithChildren();
+  rebuildGlobeWithChildren();
 }
 
 function onGlobeMouseDown(e) {
