@@ -1,0 +1,29 @@
+# Runtime-generated sensitive files
+threat_intel_app/.secret_key
+threat_intel_app/data/
+threat_intel_app/threatnexus.log
+threat_intel_app/.threatnexus.pid
+
+# Python virtual environment
+threat_intel_app/.venv/
+__pycache__/
+*.pyc
+
+# Node.js
+node_modules/
+dist/
+
+# IDE / OS artifacts
+~/
+*.swp
+*.swo
+Thumbs.db
+.DS_Store
+
+# Environment files
+.env
+.env.*
+
+# IDE config
+.vscode/
+.idea/
