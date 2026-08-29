@@ -6,6 +6,16 @@ A compact, self-contained threat intelligence and CVE management platform built 
 
 ---
 
+### Access Map
+
+![Access Map Dashboard](screenshots/dashboard.png)
+
+### Global Threat Map
+
+![3D Globe Visualization](screenshots/globe.png)
+
+---
+
 ## Features
 
 | Feature | Description |
